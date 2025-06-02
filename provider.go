@@ -51,8 +51,8 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 		return nil, fmt.Errorf("API client not initialized")
 	}
 
-	// Trim trailing dot from zone if present
-	zone = libdns.AbsoluteName(zone, "")
+	// Ensure zone name is in the proper format (remove trailing dot for API calls)
+	zone = strings.TrimSuffix(zone, ".")
 
 	// List records
 	req := listRecordsRequest{Domain: zone}
@@ -87,8 +87,8 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		return nil, fmt.Errorf("API client not initialized")
 	}
 
-	// Trim trailing dot from zone if present
-	zone = libdns.AbsoluteName(zone, "")
+	// Ensure zone name is in the proper format (remove trailing dot for API calls)
+	zone = strings.TrimSuffix(zone, ".")
 
 	appendedRecords := make([]libdns.Record, 0, len(records))
 	for _, record := range records {
@@ -116,18 +116,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		}
 
 		// Convert the response back to a libdns.Record
-		njallaRecord := njallaRecord{
-			ID:      resp.ID,
-			Domain:  resp.Domain,
-			Type:    resp.Type,
-			Name:    resp.Name,
-			Content: resp.Content,
-			TTL:     resp.TTL,
-			Prio:    resp.Prio,
-			Weight:  resp.Weight,
-			Port:    resp.Port,
-			Target:  resp.Target,
-		}
+		njallaRecord := convertAddRecordResponseToNjalla(resp)
 		
 		createdRecord, err := njallaRecordToLibdns(njallaRecord)
 		if err != nil {
@@ -161,8 +150,8 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		defer cancel()
 	}
 
-	// Trim trailing dot from zone if present
-	zone = libdns.AbsoluteName(zone, "")
+	// Ensure zone name is in the proper format (remove trailing dot for API calls)
+	zone = strings.TrimSuffix(zone, ".")
 
 	// Collect records by name and type for more efficient lookups
 	recordsByKey := make(map[string]libdns.Record)
@@ -324,18 +313,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 			}
 
 			// Convert the response back to a libdns.Record
-			njallaRecord := njallaRecord{
-				ID:      resp.ID,
-				Domain:  resp.Domain,
-				Type:    resp.Type,
-				Name:    resp.Name,
-				Content: resp.Content,
-				TTL:     resp.TTL,
-				Prio:    resp.Prio,
-				Weight:  resp.Weight,
-				Port:    resp.Port,
-				Target:  resp.Target,
-			}
+			njallaRecord := convertAddRecordResponseToNjalla(resp)
 			
 			result, err = njallaRecordToLibdns(njallaRecord)
 			if err != nil {
@@ -380,8 +358,8 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		defer cancel()
 	}
 
-	// Trim trailing dot from zone if present
-	zone = libdns.AbsoluteName(zone, "")
+	// Ensure zone name is in the proper format (remove trailing dot for API calls)
+	zone = strings.TrimSuffix(zone, ".")
 
 	deletedRecords := make([]libdns.Record, 0, len(records))
 	recordMap := make(map[string]libdns.Record)
@@ -486,6 +464,10 @@ func extractRecordID(record libdns.Record) string {
 		if pd, ok := r.ProviderData.(map[string]string); ok {
 			return pd["id"]
 		}
+	case libdns.RR:
+		// libdns.RR doesn't support ProviderData
+		// This is a limitation of the generic RR type
+		return ""
 	}
 	return ""
 }

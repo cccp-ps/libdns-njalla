@@ -3,7 +3,6 @@ package njalla
 import (
 	"fmt"
 	"net/netip"
-	"strings"
 	"time"
 
 	"github.com/libdns/libdns"
@@ -163,7 +162,7 @@ func libdnsRecordToNjalla(record libdns.Record, zone string) (njallaRecord, erro
 	rr := record.RR()
 	result := njallaRecord{
 		Domain: zone,
-		Name:   libdns.RelativeName(rr.Name, zone),
+		Name:   libdns.RelativeName(rr.Name, zone+"."),
 		TTL:    int(rr.TTL.Seconds()),
 	}
 
@@ -214,6 +213,8 @@ func libdnsRecordToNjalla(record libdns.Record, zone string) (njallaRecord, erro
 	case libdns.RR:
 		result.Type = r.Type
 		result.Content = r.Data
+		// RR types don't have ProviderData, but we can store ID in a standardized way
+		// This is a limitation - libdns.RR doesn't support ProviderData
 		
 	default:
 		return result, fmt.Errorf("unsupported record type: %T", record)
@@ -224,10 +225,10 @@ func libdnsRecordToNjalla(record libdns.Record, zone string) (njallaRecord, erro
 		result.ID = id
 	}
 
-	// Ensure zone name ends with a dot
-	if !strings.HasSuffix(zone, ".") {
-		zone = zone + "."
-	}
-
 	return result, nil
+}
+
+// convertAddRecordResponseToNjalla converts addRecordResponse to njallaRecord
+func convertAddRecordResponseToNjalla(resp addRecordResponse) njallaRecord {
+	return njallaRecord(resp)
 } 
