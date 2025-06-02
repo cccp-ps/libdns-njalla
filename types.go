@@ -82,20 +82,28 @@ func njallaRecordToLibdns(record njallaRecord) (libdns.Record, error) {
 
 	switch record.Type {
 	case "A":
+		ip, err := netip.ParseAddr(record.Content)
+		if err != nil {
+			return nil, fmt.Errorf("invalid A record IP address %q: %w", record.Content, err)
+		}
 		return libdns.Address{
 			Name: record.Name,
 			TTL:  recordTTL,
-			IP:   netip.MustParseAddr(record.Content),
+			IP:   ip,
 			ProviderData: map[string]string{
 				"id": record.ID,
 			},
 		}, nil
 
 	case "AAAA":
+		ip, err := netip.ParseAddr(record.Content)
+		if err != nil {
+			return nil, fmt.Errorf("invalid AAAA record IP address %q: %w", record.Content, err)
+		}
 		return libdns.Address{
 			Name: record.Name,
 			TTL:  recordTTL,
-			IP:   netip.MustParseAddr(record.Content),
+			IP:   ip,
 			ProviderData: map[string]string{
 				"id": record.ID,
 			},

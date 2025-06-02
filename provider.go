@@ -37,6 +37,10 @@ type Provider struct {
 // getClient lazily initializes the API client
 func (p *Provider) getClient() *client {
 	p.clientOnce.Do(func() {
+		if p.APIToken == "" {
+			// Don't panic, let methods handle this gracefully
+			return
+		}
 		p.client = newClient(p.APIToken)
 	})
 	return p.client
@@ -46,6 +50,10 @@ func (p *Provider) getClient() *client {
 // It retrieves all DNS records from the specified zone and returns them as libdns.Record types.
 // This method implements the libdns.RecordGetter interface.
 func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record, error) {
+	if p.APIToken == "" {
+		return nil, fmt.Errorf("API token is required")
+	}
+	
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -82,6 +90,10 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 //
 // This method implements the libdns.RecordAppender interface.
 func (p *Provider) AppendRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	if p.APIToken == "" {
+		return nil, fmt.Errorf("API token is required")
+	}
+	
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -94,7 +106,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	for _, record := range records {
 		njallaRec, err := libdnsRecordToNjalla(record, zone)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert record: %w", err)
+			return appendedRecords, fmt.Errorf("failed to convert record: %w", err)
 		}
 
 		// Create record in Njalla
@@ -112,7 +124,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		var resp addRecordResponse
 
 		if err := client.call(ctx, "add-record", req, &resp); err != nil {
-			return nil, fmt.Errorf("failed to add record: %w", err)
+			return appendedRecords, fmt.Errorf("failed to add record: %w", err)
 		}
 
 		// Convert the response back to a libdns.Record
@@ -120,7 +132,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		
 		createdRecord, err := njallaRecordToLibdns(njallaRecord)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert response record: %w", err)
+			return appendedRecords, fmt.Errorf("failed to convert response record: %w", err)
 		}
 
 		appendedRecords = append(appendedRecords, createdRecord)
@@ -138,6 +150,10 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 // The method handles timeouts properly and includes retries for transient failures.
 // This method implements the libdns.RecordSetter interface.
 func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	if p.APIToken == "" {
+		return nil, fmt.Errorf("API token is required")
+	}
+	
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -345,6 +361,10 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 //
 // This method implements the libdns.RecordDeleter interface.
 func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []libdns.Record) ([]libdns.Record, error) {
+	if p.APIToken == "" {
+		return nil, fmt.Errorf("API token is required")
+	}
+	
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
