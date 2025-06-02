@@ -128,7 +128,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 		}
 
 		// Convert the response back to a libdns.Record
-		njallaRecord := convertAddRecordResponseToNjalla(resp)
+		njallaRecord := njallaRecord(resp)
 		
 		createdRecord, err := njallaRecordToLibdns(njallaRecord)
 		if err != nil {
@@ -329,7 +329,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 			}
 
 			// Convert the response back to a libdns.Record
-			njallaRecord := convertAddRecordResponseToNjalla(resp)
+			njallaRecord := njallaRecord(resp)
 			
 			result, err = njallaRecordToLibdns(njallaRecord)
 			if err != nil {

@@ -236,7 +236,3 @@ func libdnsRecordToNjalla(record libdns.Record, zone string) (njallaRecord, erro
 	return result, nil
 }
 
-// convertAddRecordResponseToNjalla converts addRecordResponse to njallaRecord
-func convertAddRecordResponseToNjalla(resp addRecordResponse) njallaRecord {
-	return njallaRecord(resp)
-} 
