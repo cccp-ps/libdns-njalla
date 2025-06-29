@@ -554,6 +554,17 @@ func TestRetryConfig_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Verify all config fields are set correctly
+			if tt.config.BaseDelay <= 0 && tt.name != "very small delays" {
+				t.Errorf("Expected positive BaseDelay, got %v", tt.config.BaseDelay)
+			}
+			if tt.config.MaxDelay <= 0 {
+				t.Errorf("Expected positive MaxDelay, got %v", tt.config.MaxDelay)
+			}
+			if tt.config.RandomFactor < 0 || tt.config.RandomFactor > 1 {
+				t.Errorf("Expected RandomFactor between 0 and 1, got %v", tt.config.RandomFactor)
+			}
+
 			// Test calculateBackoff with various configs
 			for attempt := 0; attempt < 3; attempt++ {
 				delay := calculateBackoff(tt.config, attempt)
@@ -604,8 +615,18 @@ func TestClientCall_ActualRetryLogic(t *testing.T) {
 		RandomFactor: 0.1,
 	}
 
+	// Verify all config fields are set correctly
 	if config.MaxRetries != 2 {
 		t.Errorf("Expected MaxRetries 2, got %d", config.MaxRetries)
+	}
+	if config.BaseDelay != 10*time.Millisecond {
+		t.Errorf("Expected BaseDelay 10ms, got %v", config.BaseDelay)
+	}
+	if config.MaxDelay != 100*time.Millisecond {
+		t.Errorf("Expected MaxDelay 100ms, got %v", config.MaxDelay)
+	}
+	if config.RandomFactor != 0.1 {
+		t.Errorf("Expected RandomFactor 0.1, got %v", config.RandomFactor)
 	}
 }
 
@@ -719,9 +740,18 @@ func TestClientCall_MaxRetriesExceededWithActualErrors(t *testing.T) {
 		RandomFactor: 0.0, // No randomness for predictable testing
 	}
 
-	// Verify the retry configuration
+	// Verify all retry configuration fields
 	if config.MaxRetries != maxRetries {
 		t.Errorf("Expected MaxRetries %d, got %d", maxRetries, config.MaxRetries)
+	}
+	if config.BaseDelay != 1*time.Millisecond {
+		t.Errorf("Expected BaseDelay 1ms, got %v", config.BaseDelay)
+	}
+	if config.MaxDelay != 10*time.Millisecond {
+		t.Errorf("Expected MaxDelay 10ms, got %v", config.MaxDelay)
+	}
+	if config.RandomFactor != 0.0 {
+		t.Errorf("Expected RandomFactor 0.0, got %v", config.RandomFactor)
 	}
 }
 
