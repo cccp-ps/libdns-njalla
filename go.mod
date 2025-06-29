@@ -1,4 +1,4 @@
-module github.com/libdns/njalla
+module github.com/cccp-ps/libdns-njalla
 
 go 1.18
 
