@@ -30,12 +30,12 @@ type Provider struct {
 	// You can generate an API token from your Njalla account settings.
 	APIToken string `json:"api_token,omitempty"`
 
-	client     *client
+	client     clientInterface
 	clientOnce sync.Once
 }
 
 // getClient lazily initializes the API client
-func (p *Provider) getClient() *client {
+func (p *Provider) getClient() clientInterface {
 	p.clientOnce.Do(func() {
 		if p.APIToken == "" {
 			// Don't panic, let methods handle this gracefully
@@ -53,7 +53,7 @@ func (p *Provider) GetRecords(ctx context.Context, zone string) ([]libdns.Record
 	if p.APIToken == "" {
 		return nil, fmt.Errorf("API token is required")
 	}
-	
+
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -93,7 +93,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 	if p.APIToken == "" {
 		return nil, fmt.Errorf("API token is required")
 	}
-	
+
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -129,7 +129,7 @@ func (p *Provider) AppendRecords(ctx context.Context, zone string, records []lib
 
 		// Convert the response back to a libdns.Record
 		njallaRecord := njallaRecord(resp)
-		
+
 		createdRecord, err := njallaRecordToLibdns(njallaRecord)
 		if err != nil {
 			return appendedRecords, fmt.Errorf("failed to convert response record: %w", err)
@@ -153,7 +153,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	if p.APIToken == "" {
 		return nil, fmt.Errorf("API token is required")
 	}
-	
+
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -172,7 +172,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	// Collect records by name and type for more efficient lookups
 	recordsByKey := make(map[string]libdns.Record)
 	recordsWithoutIDs := make([]libdns.Record, 0)
-	
+
 	// First check which records already have IDs in their ProviderData
 	for _, record := range records {
 		id := extractRecordID(record)
@@ -191,13 +191,13 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		// Use a shorter timeout for this sub-operation
 		fetchCtx, fetchCancel := context.WithTimeout(ctx, 20*time.Second)
 		defer fetchCancel()
-		
+
 		// This is unavoidable for records without IDs - we need to check if they exist
 		existingRecords, err := p.GetRecords(fetchCtx, zone)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get existing records: %w", err)
 		}
-		
+
 		// Build a map of existing records by name and type
 		for _, rec := range existingRecords {
 			key := fmt.Sprintf("%s|%s", rec.RR().Name, rec.RR().Type)
@@ -206,18 +206,18 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 	}
 
 	setRecords := make([]libdns.Record, 0, len(records))
-	
+
 	// Process records with IDs (update operations)
 	for id, record := range recordsByKey {
 		// Create a context with timeout for this specific operation
 		opCtx, opCancel := context.WithTimeout(ctx, 10*time.Second)
-		
+
 		njallaRec, err := libdnsRecordToNjalla(record, zone)
 		if err != nil {
 			opCancel()
 			return nil, fmt.Errorf("failed to convert record: %w", err)
 		}
-		
+
 		// Update existing record
 		req := editRecordRequest{
 			ID:      id,
@@ -235,7 +235,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 		err = client.call(opCtx, "edit-record", req, &resp)
 		opCancel() // Always cancel the context when done
-		
+
 		if err != nil {
 			return setRecords, fmt.Errorf("failed to update record %s: %w", id, err)
 		}
@@ -246,7 +246,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		}
 
 		setRecords = append(setRecords, updatedRecord)
-		
+
 		// Check if parent context is done after each operation
 		select {
 		case <-ctx.Done():
@@ -255,15 +255,15 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 			// Continue with next record
 		}
 	}
-	
+
 	// Process records without IDs - check if they exist
 	for _, record := range recordsWithoutIDs {
 		// Create a context with timeout for this specific operation
 		opCtx, opCancel := context.WithTimeout(ctx, 10*time.Second)
-		
+
 		key := fmt.Sprintf("%s|%s", record.RR().Name, record.RR().Type)
 		existingRecord, exists := existingRecordsByKey[key]
-		
+
 		njallaRec, err := libdnsRecordToNjalla(record, zone)
 		if err != nil {
 			opCancel()
@@ -279,7 +279,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 				opCancel()
 				return nil, fmt.Errorf("missing ID for existing record")
 			}
-			
+
 			// Update existing record
 			req := editRecordRequest{
 				ID:      id,
@@ -297,7 +297,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 			err = client.call(opCtx, "edit-record", req, &resp)
 			opCancel()
-			
+
 			if err != nil {
 				return setRecords, fmt.Errorf("failed to update record: %w", err)
 			}
@@ -323,14 +323,14 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 
 			err = client.call(opCtx, "add-record", req, &resp)
 			opCancel()
-			
+
 			if err != nil {
 				return setRecords, fmt.Errorf("failed to add record: %w", err)
 			}
 
 			// Convert the response back to a libdns.Record
 			njallaRecord := njallaRecord(resp)
-			
+
 			result, err = njallaRecordToLibdns(njallaRecord)
 			if err != nil {
 				return setRecords, fmt.Errorf("failed to convert response record: %w", err)
@@ -338,7 +338,7 @@ func (p *Provider) SetRecords(ctx context.Context, zone string, records []libdns
 		}
 
 		setRecords = append(setRecords, result)
-		
+
 		// Check if parent context is done after each operation
 		select {
 		case <-ctx.Done():
@@ -364,7 +364,7 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 	if p.APIToken == "" {
 		return nil, fmt.Errorf("API token is required")
 	}
-	
+
 	client := p.getClient()
 	if client == nil {
 		return nil, fmt.Errorf("API client not initialized")
@@ -408,11 +408,11 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		if err != nil {
 			return nil, fmt.Errorf("failed to get existing records: %w", err)
 		}
-		
+
 		// Match records without IDs to existing records
 		for _, existingRecord := range existingRecords {
 			key := fmt.Sprintf("%s|%s", existingRecord.RR().Name, existingRecord.RR().Type)
-			
+
 			if _, needs := recordMap[key]; needs {
 				id := extractRecordID(existingRecord)
 				if id != "" {
@@ -430,25 +430,25 @@ func (p *Provider) DeleteRecords(ctx context.Context, zone string, records []lib
 		if !isRecordID(id) {
 			continue
 		}
-		
+
 		// Create a context with timeout for this specific deletion
 		opCtx, opCancel := context.WithTimeout(ctx, 10*time.Second)
-		
+
 		// Delete record
 		req := removeRecordRequest{
 			Domain: zone,
 			ID:     id,
 		}
-		
+
 		err := client.call(opCtx, "remove-record", req, nil)
 		opCancel() // Always cancel the context when done
-		
+
 		if err != nil {
 			return deletedRecords, fmt.Errorf("failed to delete record %s: %w", id, err)
 		}
-		
+
 		deletedRecords = append(deletedRecords, record)
-		
+
 		// Check if parent context is done after each operation
 		select {
 		case <-ctx.Done():

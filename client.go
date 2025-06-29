@@ -14,11 +14,16 @@ import (
 
 const apiEndpoint = "https://njal.la/api/1/"
 
+// clientInterface defines the interface for API clients
+type clientInterface interface {
+	call(ctx context.Context, method string, params interface{}, result interface{}) error
+}
+
 // RetryConfig holds configuration for retry attempts
 type RetryConfig struct {
-	MaxRetries  int
-	BaseDelay   time.Duration
-	MaxDelay    time.Duration
+	MaxRetries   int
+	BaseDelay    time.Duration
+	MaxDelay     time.Duration
 	RandomFactor float64
 }
 
@@ -33,15 +38,15 @@ func DefaultRetryConfig() RetryConfig {
 }
 
 type client struct {
-	token      string
-	timeout    time.Duration
+	token       string
+	timeout     time.Duration
 	retryConfig RetryConfig
 }
 
 func newClient(token string) *client {
 	return &client{
-		token:      token,
-		timeout:    30 * time.Second,
+		token:       token,
+		timeout:     30 * time.Second,
 		retryConfig: DefaultRetryConfig(),
 	}
 }
@@ -71,7 +76,7 @@ func isRetryable(err error, statusCode int) bool {
 	if err != nil {
 		return true
 	}
-	
+
 	// Server errors and rate limiting
 	return statusCode >= 500 || statusCode == 429
 }
@@ -80,16 +85,16 @@ func isRetryable(err error, statusCode int) bool {
 func calculateBackoff(config RetryConfig, attempt int) time.Duration {
 	// Calculate basic exponential backoff
 	delay := float64(config.BaseDelay) * math.Pow(2, float64(attempt))
-	
+
 	// Apply jitter to avoid thundering herd
 	jitter := rand.Float64() * config.RandomFactor * delay
 	delay += jitter
-	
+
 	// Cap at max delay
 	if delay > float64(config.MaxDelay) {
 		delay = float64(config.MaxDelay)
 	}
-	
+
 	return time.Duration(delay)
 }
 
@@ -108,14 +113,14 @@ func (c *client) call(ctx context.Context, method string, params interface{}, re
 
 	var lastErr error
 	var statusCode int
-	
+
 	// Try the request with retries
 	for attempt := 0; attempt <= c.retryConfig.MaxRetries; attempt++ {
 		// Skip delay on the first attempt
 		if attempt > 0 {
 			// Calculate backoff duration
 			backoff := calculateBackoff(c.retryConfig, attempt-1)
-			
+
 			// Create a timer using the context
 			timer := time.NewTimer(backoff)
 			select {
@@ -126,7 +131,7 @@ func (c *client) call(ctx context.Context, method string, params interface{}, re
 				// Continue with the retry
 			}
 		}
-		
+
 		// Make a new request object for each attempt
 		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiEndpoint, bytes.NewBuffer(reqBody))
 		if err != nil {
@@ -147,9 +152,9 @@ func (c *client) call(ctx context.Context, method string, params interface{}, re
 			// Retry on network errors
 			continue
 		}
-		
+
 		statusCode = resp.StatusCode
-		
+
 		// If we got a response, read the body then close it
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -193,4 +198,4 @@ func (c *client) call(ctx context.Context, method string, params interface{}, re
 
 	// If we exhausted all retries
 	return fmt.Errorf("max retries exceeded, last error: %w", lastErr)
-} 
+}
